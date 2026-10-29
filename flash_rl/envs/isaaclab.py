@@ -13,6 +13,9 @@ ACTION_BOUNDS = {
     "Isaac-Repose-Cube-Shadow-Direct-v0": 1.0,
     "Isaac-Repose-Cube-Allegro-Direct-v0": 1.0,
     "Isaac-Velocity-Flat-G1-v0": 1.0,
+    "FlashSAC-Velocity-Flat-G1-v0": 1.0,
+    "FlashSAC-Backflip-Go2-v0": 1.0,
+    "FlashSAC-G1ForearmStand-v0": 1.0,
     "Isaac-Velocity-Rough-G1-v0": 1.0,
     "Isaac-Velocity-Flat-H1-v0": 1.0,
     "Isaac-Velocity-Rough-H1-v0": 1.0,
@@ -36,6 +39,11 @@ def recursive_to_numpy(
         return type(data)(recursive_to_numpy(v) for v in data)
     else:
         return data
+
+
+def env_is_time_phased(envs) -> bool:
+    # rewards/observations depend on episode time: episode_length_buf must start at 0 after a reset
+    return getattr(envs.unwrapped.cfg, "episode_length_s", 20.0) <= 5.0 and "Backflip" in str(envs.spec.id if envs.spec else "")
 
 
 class IsaacLabVectorEnv(
@@ -71,6 +79,16 @@ class IsaacLabVectorEnv(
         self.simulation_app = app_launcher.app
 
         from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
+
+        from flash_rl.envs.g1_flashsac_env import register as register_flashsac_envs
+
+        register_flashsac_envs()  # FlashSAC-Velocity-Flat-G1-v0 (paper Table 14 rewards)
+        from flash_rl.envs.go2_backflip_isaaclab_env import register as register_backflip
+
+        register_backflip()  # FlashSAC-Backflip-Go2-v0 (time-phased rewards)
+        from flash_rl.envs.g1_forearm_stand_isaaclab_env import register as register_g1_stand
+
+        register_g1_stand()  # FlashSAC-G1ForearmStand-v0
 
         env_cfg = parse_env_cfg(
             env_name,
@@ -130,7 +148,7 @@ class IsaacLabVectorEnv(
         # `time_out = self.episode_length_buf >= self.max_episode_length - 1`
         # While training, this code spreads out the resets to avoid spikes
         # when many environments reset at a similar time.
-        if random_start_init:
+        if random_start_init and not env_is_time_phased(self.envs):
             # step in current episode (per env)
             cast(Any, self.envs.unwrapped).episode_length_buf = torch.randint_like(
                 cast(Any, self.envs.unwrapped).episode_length_buf, high=int(self.max_episode_steps)

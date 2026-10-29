@@ -94,6 +94,41 @@ def gs_quat_conjugate(a):
 
 
 class Go2BackflipEnv(Go2WalkEnv):
+    def check_termination(self):
+        super().check_termination()
+        # a diverged simulation (NaN/inf, huge velocity) must be reset, not fed to the critic
+        bad = ~(
+            torch.isfinite(self.base_pos).all(dim=1)
+            & torch.isfinite(self.dof_pos).all(dim=1)
+            & torch.isfinite(self.dof_vel).all(dim=1)
+            & torch.isfinite(self.base_ang_vel).all(dim=1)
+        ) | (self.base_ang_vel.abs().max(dim=1).values > 100.0)
+        self.reset_buf |= bad
+
+    def compute_reward(self):
+        super().compute_reward()
+        self.rew_buf = torch.nan_to_num(self.rew_buf, nan=0.0, posinf=0.0, neginf=0.0).clamp(-100.0, 100.0)
+
+    def _randomize_controls(self, env_ids=None):
+        super()._randomize_controls(env_ids)
+        cfg = self.env_cfg
+        if self.eval or not cfg.get("randomize_joint_dynamics", False):
+            return
+        if env_ids is None:
+            env_ids = torch.arange(0, self.num_envs)
+        elif len(env_ids) == 0:
+            return
+        n = len(env_ids)
+        lo, hi = cfg["armature_range"]
+        arm = gs.rand((n, self.num_dof), dtype=float) * (hi - lo) + lo
+        self.robot.set_dofs_armature(arm, self.motor_dofs, env_ids)
+        lo, hi = cfg["joint_damping_range"]
+        damp = gs.rand((n, self.num_dof), dtype=float) * (hi - lo) + lo
+        self.robot.set_dofs_damping(damp, self.motor_dofs, env_ids)
+        if getattr(self, "no_latency_mask", None) is None:
+            self.no_latency_mask = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        self.no_latency_mask[env_ids.to(self.device)] = torch.rand(n, device=self.device) < cfg["no_latency_prob"]
+
     def reset_idx(self, envs_idx):
         if len(envs_idx) == 0:
             return
@@ -111,6 +146,12 @@ class Go2BackflipEnv(Go2WalkEnv):
         # reset root states - position
         self.base_pos[envs_idx] = self.base_init_pos
         self.base_pos[envs_idx, 2] = 0.32
+        if self.env_cfg.get("randomize_joint_dynamics", False) and not self.eval:
+            n = len(envs_idx)
+            self.dof_pos[envs_idx] += (torch.rand(n, self.num_dof, device=self.device) - 0.5) * 0.1
+            self.robot.set_dofs_position(
+                position=self.dof_pos[envs_idx], dofs_idx_local=self.motor_dofs, zero_velocity=True, envs_idx=envs_idx
+            )
         self.base_quat[envs_idx] = self.base_init_quat.reshape(1, -1)
         self.robot.set_pos(self.base_pos[envs_idx], zero_velocity=False, envs_idx=envs_idx)
         self.robot.set_quat(self.base_quat[envs_idx], zero_velocity=False, envs_idx=envs_idx)
@@ -128,6 +169,8 @@ class Go2BackflipEnv(Go2WalkEnv):
 
         self._resample_commands(envs_idx)
 
+        if getattr(self, "pitch_acc", None) is not None:
+            self.pitch_acc[envs_idx] = 0.0
         # reset buffers
         self.obs_history_buf[envs_idx] = 0.0
         self.actions[envs_idx] = 0.0
@@ -170,6 +213,7 @@ class Go2BackflipEnv(Go2WalkEnv):
             axis=-1,
         )
 
+        self.obs_buf = torch.nan_to_num(self.obs_buf, nan=0.0, posinf=100.0, neginf=-100.0)
         self.obs_history_buf = torch.cat([self.obs_history_buf[:, self.num_single_obs :], self.obs_buf.detach()], dim=1)
 
         if self.num_privileged_obs is not None:
@@ -203,15 +247,43 @@ class Go2BackflipEnv(Go2WalkEnv):
 
     def _reward_ang_vel_y(self):
         current_time = self.episode_length_buf * self.dt
-        ang_vel = -self.base_ang_vel[:, 1].clamp(max=7.2, min=-7.2)
-        return ang_vel * torch.logical_and(current_time > 0.5, current_time < 1.0)
+        ang_vel = -self.base_ang_vel[:, 1].clamp(max=14.0, min=-14.0)
+        if getattr(self, "pitch_acc", None) is None:
+            self.pitch_acc = torch.zeros(self.num_envs, device=self.device)
+        # stop rewarding rotation once one full turn (2*pi) has been done
+        r = ang_vel * torch.logical_and(current_time > 0.5, current_time < 1.0) * (self.pitch_acc < 2 * torch.pi)
+        self.pitch_acc += -self.base_ang_vel[:, 1] * self.dt
+        return r
+
+    def _reward_straight_axis(self):
+        # body y axis must stay parallel to world y during the whole flip (= pure pitch rotation: no roll, no yaw twist)
+        y_axis = torch.tensor([0.0, 1.0, 0.0], device=self.device).expand(self.num_envs, 3)
+        y_world = gs_transform_by_quat(y_axis, self.base_quat)
+        current_time = self.episode_length_buf * self.dt
+        return torch.square(y_world - y_axis).sum(dim=1) * torch.logical_and(current_time > 0.5, current_time < 1.3)
+
+    def _reward_lateral_drift(self):
+        return torch.square(self.base_pos[:, 1] - self.base_init_pos[1])
+
+    def _reward_jump_height(self):
+        current_time = self.episode_length_buf * self.dt
+        h = (self.base_pos[:, 2] - 0.3).clamp(min=0.0, max=0.5)
+        return h * torch.logical_and(current_time > 0.55, current_time < 1.0)
+
+    def _reward_landing_ang_vel(self):
+        current_time = self.episode_length_buf * self.dt
+        return torch.abs(self.base_ang_vel[:, 1]) * (current_time > 1.0)
+
+    def _reward_landing_drift(self):
+        current_time = self.episode_length_buf * self.dt
+        return torch.square(self.base_lin_vel[:, :2]).sum(dim=1) * (current_time > 1.1)
 
     def _reward_ang_vel_z(self):
         return torch.abs(self.base_ang_vel[:, 2])
 
     def _reward_lin_vel_z(self):
         current_time = self.episode_length_buf * self.dt
-        lin_vel = self.robot.get_vel()[:, 2].clamp(max=3)
+        lin_vel = self.robot.get_vel()[:, 2].clamp(max=3.5)
         return lin_vel * torch.logical_and(current_time > 0.5, current_time < 0.75)
 
     def _reward_height_control(self):
@@ -258,6 +330,22 @@ class Go2BackflipEnv(Go2WalkEnv):
         current_time = self.episode_length_buf * self.dt
         foot_height = (self.foot_positions[:, :, 2]).view(self.num_envs, -1) - 0.02
         return foot_height.clamp(min=0).sum(dim=1) * (current_time < 0.5)
+
+    def _reward_landing_pose(self):
+        # After the flip: stay close to the standing pose (legs absorb the landing, no belly flop)
+        current_time = self.episode_length_buf * self.dt
+        dev = torch.square(self.dof_pos - self.default_dof_pos).sum(dim=1)
+        return dev * (current_time > 1.1)
+
+    def _reward_landing_height(self):
+        current_time = self.episode_length_buf * self.dt
+        return torch.square(0.3 - self.base_pos[:, 2]) * (current_time > 1.1)
+
+    def _reward_landing_collision(self):
+        # base / thigh / calf touching the ground after the flip (belly or knee landing)
+        current_time = self.episode_length_buf * self.dt
+        c = (torch.norm(self.link_contact_forces[:, self.penalized_contact_link_indices, :], dim=-1) > 0.1).sum(dim=1)
+        return c.float() * (current_time > 1.0)
 
     def _reward_collision(self):
         # Penalize collisions on selected bodies
@@ -340,8 +428,12 @@ def get_cfgs():
         # domain randomization
         "randomize_friction": True,
         "friction_range": [0.2, 1.5],
+        "randomize_joint_dynamics": True,
+        "armature_range": [0.0, 0.03],
+        "joint_damping_range": [0.0, 3.0],
+        "no_latency_prob": 0.3,
         "randomize_base_mass": True,
-        "added_mass_range": [-1.0, 3.0],
+        "added_mass_range": [-1.5, 3.5],
         "randomize_com_displacement": True,
         "com_displacement_range": [-0.01, 0.01],
         "randomize_motor_strength": False,
@@ -349,9 +441,9 @@ def get_cfgs():
         "randomize_motor_offset": True,
         "motor_offset_range": [-0.02, 0.02],
         "randomize_kp_scale": True,
-        "kp_scale_range": [0.8, 1.2],
+        "kp_scale_range": [0.7, 1.3],
         "randomize_kd_scale": True,
-        "kd_scale_range": [0.8, 1.2],
+        "kd_scale_range": [0.7, 1.3],
         # coupling
         "coupling": False,
     }
@@ -385,6 +477,14 @@ def get_cfgs():
             "gravity_y": -10.0,
             "feet_distance": -1.0,
             "action_rate": -0.001,
+            "landing_pose": -2.0,
+            "landing_height": -30.0,
+            "landing_collision": -10.0,
+            "landing_ang_vel": -1.0,
+            "jump_height": 20.0,
+            "straight_axis": -5.0,
+            "lateral_drift": -1.0,
+            "landing_drift": -2.0,
         },
     }
     command_cfg = {

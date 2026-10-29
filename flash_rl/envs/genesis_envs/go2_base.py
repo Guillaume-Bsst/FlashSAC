@@ -228,6 +228,7 @@ class Go2BaseEnv:
                 enable_collision=True,
                 enable_self_collision=True,
                 enable_joint_limit=True,
+                batch_dofs_info=True,
             ),
             show_viewer=show_viewer,
             show_FPS=False,
@@ -453,8 +454,8 @@ class Go2BaseEnv:
         self.batched_p_gains = self.p_gains[None, :].repeat(self.num_envs, 1)
         self.batched_d_gains = self.d_gains[None, :].repeat(self.num_envs, 1)
 
-        self.robot.set_dofs_kp(self.p_gains, self.motor_dofs)
-        self.robot.set_dofs_kv(self.d_gains, self.motor_dofs)
+        self.robot.set_dofs_kp(self.batched_p_gains, self.motor_dofs)
+        self.robot.set_dofs_kv(self.batched_d_gains, self.motor_dofs)
 
         default_joint_angles = self.env_cfg["default_joint_angles"]
         self.default_dof_pos = torch.tensor(
@@ -795,6 +796,8 @@ class Go2BaseEnv:
         action_range = self.env_cfg["action_range"]
         self.actions = torch.clip(actions, -action_range, action_range)
         exec_actions = self.last_actions if self.action_latency > 0 else self.actions
+        if getattr(self, "no_latency_mask", None) is not None:  # randomized latency: some envs act with no delay
+            exec_actions = torch.where(self.no_latency_mask[:, None], self.actions, exec_actions)
         dof_pos_list = []
         dof_vel_list = []
         if self.env_cfg["use_implicit_controller"]:
@@ -957,7 +960,7 @@ class Go2BaseEnv:
         self._floating_camera = self.scene.add_camera(
             pos=np.array([0, -1, 1]),
             lookat=np.array([0, 0, 0]),
-            # res=(720, 480),
+            res=(960, 640),
             fov=40,
             GUI=False,
         )

@@ -123,6 +123,13 @@ def run(args: argparse.Namespace) -> None:
         # collect data. use random actions until agent.can_start_training()
         if agent.can_start_training() and transition is not None:
             actions = agent.sample_actions(interaction_step, prev_transition=transition, training=True)
+        elif os.environ.get("FLASHSAC_DEMO_WARMUP"):
+            # warm-start: replay the kinematic clip (RSI start frame -> next clip targets) + wide gaussian noise
+            import flash_rl.envs.g1_forearm_stand_isaaclab_env as _G1S
+            _u = train_env.envs.unwrapped
+            _a = _G1S.demo_actions(_u)
+            _a = _a + float(os.environ["FLASHSAC_DEMO_WARMUP"]) * torch.randn_like(_a)
+            actions = _a.clamp(-1.0, 1.0).cpu().numpy()
         else:
             actions = train_env.action_space.sample()
 

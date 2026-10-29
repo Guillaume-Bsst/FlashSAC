@@ -5,6 +5,7 @@ os.environ["MKL_NUM_THREADS"] = "2"
 os.environ["NUMEXPR_NUM_THREADS"] = "2"
 
 import argparse
+import time
 import random
 from typing import MutableMapping, Optional
 
@@ -73,6 +74,8 @@ def play(args: argparse.Namespace) -> None:
         actions = agent.sample_actions(interaction_step=0, prev_transition=prev_transition, training=False)
         actions = np.array(actions)
         next_observations, rewards, terminateds, truncateds, infos = env.step(actions)
+        if args.slowmo > 0:
+            time.sleep(0.02 * args.slowmo)
 
         episode_returns += rewards
         episode_dones = np.logical_or(terminateds, truncateds)
@@ -98,6 +101,7 @@ if __name__ == "__main__":
     parser.add_argument("--overrides", action="append", default=[])
     parser.add_argument("--checkpoint_path", type=str, required=True, help="Path to agent checkpoint directory")
     parser.add_argument("--num_envs", type=int, default=16, help="Number of parallel environments for visualization")
+    parser.add_argument("--slowmo", type=float, default=0.0, help="sleep 0.02*slowmo s per step (viewer slow-motion)")
     parser.add_argument("--num_episodes", type=int, default=10, help="Number of episodes to play")
     args = parser.parse_args()
     play(args)
