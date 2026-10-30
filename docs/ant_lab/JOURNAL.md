@@ -29,6 +29,8 @@ contredit l'hypothèse. L'écart entre les deux, c'est là que l'intuition se co
   butée à 0,52) : sur la référence d'essai, suivre *parfaitement* coûte déjà 1,6 point de reward sur 5. Une reward
   qui punit le suivi parfait, c'est un signal contradictoire. À mesurer sur la vraie référence (part des frames
   hors zone souple) avant de décider.
+- **PPO d'essai** (tracking, 512 envs, 60 itérations, GPU partagé avec l'entraînement de l'expert) : 0,66 s par
+  itération de 24 pas, soit ~18 600 pas d'env/s. Les vrais débits seront mesurés sur GPU libre à E1.
 - IsaacLab renvoie les **mêmes tenseurs** `terminated` / `time_out` à chaque pas : les copier avant de les garder.
 
 ## E0
