@@ -162,3 +162,7 @@ tmp/**
 
 # saved checkpoints
 models/**
+# labo Ant
+results/ant_lab/
+runs/ant_lab/
+.superpowers/
