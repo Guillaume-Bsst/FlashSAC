@@ -22,6 +22,14 @@ contredit l'hypothèse. L'écart entre les deux, c'est là que l'intuition se co
   soit ~15 000 pas d'env/s. Avec 2048 envs, le débit sera limité par les mises à jour du réseau (batch 2048 fixe).
 - `flash_rl/types.py` du commit importe `jax`, absent de l'env `hssim` : la branche reprend le correctif de
   l'utilisateur (`jax` optionnel).
+- **Env de tracking vérifié** : robot posé sur la référence → les 6 termes de suivi valent 1,0 (env 0 et dernier env),
+  fin de clip exacte, 300 pas sans NaN.
+- **À discuter à E0 — pénalité de limite articulaire** : la recette BeyondMimic pénalise (×10) toute articulation
+  au-delà de 90 % de sa plage. Or l'expert Ant colle ses chevilles en butée (cible PD jusqu'à 0,285 rad pour une
+  butée à 0,52) : sur la référence d'essai, suivre *parfaitement* coûte déjà 1,6 point de reward sur 5. Une reward
+  qui punit le suivi parfait, c'est un signal contradictoire. À mesurer sur la vraie référence (part des frames
+  hors zone souple) avant de décider.
+- IsaacLab renvoie les **mêmes tenseurs** `terminated` / `time_out` à chaque pas : les copier avant de les garder.
 
 ## E0
 
