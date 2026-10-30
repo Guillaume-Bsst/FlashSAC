@@ -18,6 +18,10 @@ contredit l'hypothèse. L'écart entre les deux, c'est là que l'intuition se co
   avec le même modèle que le simulateur.
 - Ordre de grandeur : à force 1, un couple de 7,5 N·m sur un robot de 0,9 kg, c'est beaucoup (le poids vaut ~9 N).
   À vérifier à E0 : `k_cap` crée-t-il vraiment une demande de couple au-delà de la limite du suiveur ?
+- **Débit FlashSAC (essai, env expert, 256 envs, 2 mises à jour par pas)** : ~57 it/s une fois l'entraînement lancé,
+  soit ~15 000 pas d'env/s. Avec 2048 envs, le débit sera limité par les mises à jour du réseau (batch 2048 fixe).
+- `flash_rl/types.py` du commit importe `jax`, absent de l'env `hssim` : la branche reprend le correctif de
+  l'utilisateur (`jax` optionnel).
 
 ## E0
 
