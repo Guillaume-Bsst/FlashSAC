@@ -31,6 +31,13 @@ contredit l'hypothèse. L'écart entre les deux, c'est là que l'intuition se co
   hors zone souple) avant de décider.
 - **PPO d'essai** (tracking, 512 envs, 60 itérations, GPU partagé avec l'entraînement de l'expert) : 0,66 s par
   itération de 24 pas, soit ~18 600 pas d'env/s. Les vrais débits seront mesurés sur GPU libre à E1.
+- **Bug trouvé : le PD « implicite » de PhysX ne fait rien sur cet Ant.** Avec `ImplicitActuatorCfg`, PhysX a bien
+  les raideurs, IsaacLab affiche un couple saturé à 11,25 N·m, mais l'articulation ne bouge pas d'un millième de
+  radian : actions nulles ou à fond donnent des trajectoires identiques au bit près. On l'a vu parce que tous les
+  checkpoints de PPO et de FlashSAC avaient exactement le même score. Correction : PD **explicite**
+  (`IdealPDActuatorCfg`, mêmes Kp, Kd et limite, couple calculé à 120 Hz et envoyé en effort, le chemin qu'utilise
+  l'Ant d'origine). Le premier expert, entraîné jambes figées, est jeté. Au repos en PD, le torse est maintenant à
+  0,48 m.
 - IsaacLab renvoie les **mêmes tenseurs** `terminated` / `time_out` à chaque pas : les copier avant de les garder.
 
 ## E0

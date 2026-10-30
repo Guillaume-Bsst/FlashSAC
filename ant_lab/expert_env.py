@@ -1,6 +1,6 @@
 """Ant expert : reward « avancer » d'Isaac-Ant-Direct-v0, mais commandé en PD et de force S_EXPERT."""
 import torch
-from isaaclab.actuators import ImplicitActuatorCfg
+from isaaclab.actuators import IdealPDActuatorCfg
 from isaaclab.utils import configclass
 from isaaclab_assets.robots.ant import ANT_CFG
 from isaaclab_tasks.direct.ant.ant_env import AntEnvCfg
@@ -13,8 +13,11 @@ def pd_robot_cfg(strength: float):
     """L'Ant d'IsaacLab avec des moteurs PD de force ``strength`` (Kp, Kd et couple max multipliés)."""
     return ANT_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
-        actuators={"body": ImplicitActuatorCfg(joint_names_expr=[".*"], stiffness=KP0 * strength,
-                                               damping=KD0 * strength, effort_limit_sim=TAU0 * strength)},
+        # PD explicite : IsaacLab calcule le couple à chaque pas de physique et l'envoie en effort. Le drive
+        # implicite de PhysX n'agit pas sur les articulations de cet USD (couple « appliqué » saturé, rien ne bouge).
+        actuators={"body": IdealPDActuatorCfg(joint_names_expr=[".*"], stiffness=KP0 * strength,
+                                              damping=KD0 * strength, effort_limit=TAU0 * strength,
+                                              effort_limit_sim=TAU0 * strength)},
     )
 
 
