@@ -2,7 +2,7 @@
 import json
 import os
 
-from ant_lab.sim import check_gpu_free, launch_app
+from ant_lab.sim import check_gpu_free, launch_app, run_main
 
 PHYSX_API = ["get_generalized_mass_matrices", "get_jacobians", "get_gravity_compensation_forces",
              "get_coriolis_and_centrifugal_compensation_forces"]
@@ -79,4 +79,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    run_main(main)

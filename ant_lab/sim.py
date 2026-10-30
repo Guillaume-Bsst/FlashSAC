@@ -29,3 +29,21 @@ def make_env(env_id: str, num_envs: int, seed: int = 0, device: str = "cuda:0"):
     cfg = parse_env_cfg(env_id, device=device, num_envs=num_envs)
     cfg.seed = seed
     return gym.make(env_id, cfg=cfg)
+
+
+def run_main(fn) -> None:
+    """Lance ``fn`` ; toute exception sort en code 1. IsaacSim garde le processus vivant et sort en 0 sinon."""
+    import os
+    import traceback
+
+    try:
+        fn()
+    except SystemExit:
+        raise
+    except BaseException:  # noqa: BLE001
+        traceback.print_exc()
+        import sys
+
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(1)
