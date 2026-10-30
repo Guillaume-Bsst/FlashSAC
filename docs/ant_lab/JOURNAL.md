@@ -68,6 +68,47 @@ plus grands), ou une survie en boucle ouverte déjà nulle à k = 1, σ = 0 (le 
 
 ### Constat (écrit après)
 
+Tableau (`results/ant_lab/e0/e0_table.md`) :
+
+| Référence | k | Survie boucle ouverte (s) | Fin de clip (%) | Frames > limite de couple (%) | Résidu contact médian / p95 (% M·g) | Frames hors limite souple (%) |
+|---|---|---|---|---|---|---|
+| σ = 0 | 1,0 | 4,89 | 100 | 0,0 | 1,7 / 51 | 100 |
+| σ = 0 | 1,25 | 4,89 | 100 | 46 | 1,7 / 51 | 100 |
+| σ = 0 | 1,5 | 4,89 | 100 | 58 | 1,7 / 51 | 100 |
+| σ plancher | 1,0 | 3,93 | 84 | 0,0 | 3,9 / 84 | 98 |
+| σ plancher | 1,25 | 3,93 | 84 | 46 | 3,9 / 84 | 98 |
+| σ plancher | 1,5 | 3,98 | 85 | 58 | 3,9 / 84 | 98 |
+
+Mesure ajoutée en cours de route (rejeu sans politique, départ au début du clip, 64 envs, k = 1,25) : **l'écart
+médian du torse avec la référence vaut 3,3 m à 1 s, 12 m à 3 s, 41 m à 10 s**, en mode résiduel comme en mode
+absolu. Le robot ne bouge pas : il reproduit les angles sans avancer.
+
+Ce que ça dit :
+
+1. **Le rejeu en boucle ouverte ne discrimine rien, et notre critère de succès est trop laxiste.** « Aller au bout
+   du clip » vaut 100 % et l'erreur articulaire 0,055 rad pour un robot *qui reste sur place*. Les terminaisons
+   BeyondMimic ne regardent que des hauteurs et l'inclinaison, jamais la position horizontale. Et le terme
+   `body_pos` est ré-ancré sur la position du robot : il vaut 0,97 même immobile. Seul `anchor_pos` voit le
+   retard, et il tombe à 0 en une seconde (σ = 0,3 m), donc plus de gradient. Hypothèse contredite : la survie
+   ne baisse pas avec k, parce que rien ne force à suivre la marche.
+2. **La demande de couple est forte (46 % à k = 1,25), mais elle exagère.** L'expert est « bang-bang » : il sature
+   ses moteurs presque tout le temps, y compris quand ce n'est pas nécessaire. Ce qui compte, c'est si le suiveur
+   *a besoin* de ce couple pour avancer à 4 m/s : seul un suiveur entraîné le dira (E1 et E4).
+3. **La démarche de l'expert vibre** (`gait.png`) : les pieds changent de contact à haute fréquence, le torse
+   oscille entre 0,43 et 0,50 m. Pas de grands sauts, mais un trottinement très rapide (4,16 m/s), typique d'un
+   Ant RL. Le résidu de contact p95 de 51 % sur la référence *propre* vient de là (contacts qui clignotent au
+   seuil de 2 cm, accélérations par différences finies) : c'est le bruit de la mesure, pas une infaisabilité.
+4. **Le bruit plancher est fort pour un Ant** : 2° de rotation de la racine avec des pieds à 0,8 m du centre, c'est
+   ~2,8 cm au pied, plus que le seuil de contact. Des pieds « flottent » pendant des secondes (`gait.png`, droite).
+   La moitié des départs RSI survivent quand même jusqu'au bout (84 %).
+5. **La pénalité de limite articulaire est active sur 100 % des frames de la référence** : suivre parfaitement
+   coûte ~1,1 point de reward sur 5 à chaque pas (mesuré en mode résiduel). La reward se contredit.
+
+Conclusion provisoire : la référence n'est **pas** encore jugeable « presque faisable », parce que les outils de
+mesure (rejeu, terminaisons, critère de succès) ne regardent pas le déplacement. Trois corrections à discuter
+avant E1 : une terminaison sur l'écart horizontal du torse, un critère de succès qui inclut cet écart, et la
+pénalité de limite articulaire (bornes dures au lieu de 90 %, ou retrait).
+
 ## E1
 
 ### Hypothèse (écrite avant)
