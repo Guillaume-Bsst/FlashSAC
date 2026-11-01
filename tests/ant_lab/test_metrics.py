@@ -11,14 +11,21 @@ from ant_lab.metrics import (
 )
 
 
-def _row(elapsed, frac, err, steps=0):
-    return EvalRow("ppo", 0, "c", elapsed, steps, frac, err)
+def _row(elapsed, frac, err, steps=0, vel=0.1):
+    return EvalRow("ppo", 0, "c", elapsed, steps, frac, err, vel)
 
 
 def test_is_success_bounds():
     assert is_success(_row(0, 0.9, 0.099))
     assert not is_success(_row(0, 0.89, 0.05))
     assert not is_success(_row(0, 0.95, 0.1))
+
+
+def test_success_requires_running_with_the_reference():
+    # E0 : un robot qui agite les pattes sur place va au bout du clip avec une erreur articulaire faible
+    assert is_success(_row(0, 1.0, 0.05, vel=0.49))
+    assert not is_success(_row(0, 1.0, 0.05, vel=0.5))
+    assert not is_success(_row(0, 1.0, 0.055, vel=4.16))
 
 
 def test_time_to_success_order():
@@ -31,8 +38,8 @@ def test_time_to_success_order():
 
 def test_rows_roundtrip(tmp_path):
     p = tmp_path / "rows.csv"
-    a = [EvalRow("flashsac", 1, "x/step10", 12.5, 20480, 0.75, 0.12)]
-    b = [EvalRow("ppo", 2, "model_5.pt", 30.0, 491520, 1.0, 0.03)]
+    a = [EvalRow("flashsac", 1, "x/step10", 12.5, 20480, 0.75, 0.12, 0.8)]
+    b = [EvalRow("ppo", 2, "model_5.pt", 30.0, 491520, 1.0, 0.03, 0.2)]
     write_rows(p, a)
     write_rows(p, b)
     assert read_rows(p) == a + b

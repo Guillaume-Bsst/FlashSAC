@@ -23,8 +23,8 @@ from ant_lab.config import (ACTION_SCALE_RAD, ENV_ACTION_MODE, ENV_K, ENV_REF, E
 from ant_lab.expert_env import pd_robot_cfg
 from ant_lab.reference import load_reference
 from ant_lab.sampling import AdaptiveSampler
-from ant_lab.tracking_math import (anchor_obs, relative_body_targets, reward_terms, termination_flags,
-                                   total_reward)
+from ant_lab.tracking_math import (anchor_obs, heading_velocity, relative_body_targets, reward_terms,
+                                   termination_flags, total_reward)
 
 
 @configclass
@@ -86,6 +86,8 @@ class AntTrackingEnv(DirectRLEnv):
         self.actions = torch.zeros(N, J, device=self.device)
         self.prev_actions = torch.zeros(N, J, device=self.device)
         self._err_sum = torch.zeros(N, device=self.device)
+        self._vel_sum = torch.zeros(N, 2, device=self.device)
+        self._ref_vel_sum = torch.zeros(N, 2, device=self.device)
         self._steps = torch.zeros(N, device=self.device)
         self.last_episode_stats: dict[str, torch.Tensor] = {}
 
@@ -151,6 +153,9 @@ class AntTrackingEnv(DirectRLEnv):
         self.sampler.step()
         q = self.robot.data.joint_pos[:, self._joint_ids]
         self._err_sum += (q - self.ref["joint_pos"][self.frame]).abs().mean(-1)
+        d = self.robot.data
+        self._vel_sum += heading_velocity(d.root_lin_vel_w, d.root_link_quat_w)
+        self._ref_vel_sum += heading_velocity(self.ref["root_lin_vel"][self.frame], self.ref["root_quat"][self.frame])
         self._steps += 1
         return terminated, time_out
 
@@ -181,6 +186,9 @@ class AntTrackingEnv(DirectRLEnv):
                 "env_ids": done.clone(),
                 "completed": self.reset_time_outs[done].float(),
                 "mean_joint_err": self._err_sum[done] / self._steps[done],
+                # écart entre vitesses moyennes de l'épisode (repère de cap) : « court-il avec la référence ? »
+                "mean_torso_vel_err": torch.linalg.norm(self._vel_sum[done] - self._ref_vel_sum[done], dim=-1)
+                / self._steps[done],
                 "length": self._steps[done].clone(),
             }
         super()._reset_idx(env_ids)
@@ -195,6 +203,8 @@ class AntTrackingEnv(DirectRLEnv):
         if self.cfg.rsi == "start":
             self._add_init_noise(env_ids)
         self._err_sum[env_ids] = 0.0
+        self._vel_sum[env_ids] = 0.0
+        self._ref_vel_sum[env_ids] = 0.0
         self._steps[env_ids] = 0.0
         self.actions[env_ids] = 0.0
         self.prev_actions[env_ids] = 0.0

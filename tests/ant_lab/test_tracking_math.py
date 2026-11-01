@@ -5,6 +5,7 @@ import torch
 from ant_lab.quat import quat_apply, quat_from_rotvec, quat_mul
 from ant_lab.tracking_math import (
     anchor_obs,
+    heading_velocity,
     relative_body_targets,
     reward_terms,
     termination_flags,
@@ -112,6 +113,17 @@ def test_termination():
 def test_joint_limit_penalty():
     ap, aq, bp, bq, lin, ang = _rand_pose(4)
     q = torch.zeros(N, J)
-    q[:, 0] = 0.9 + 0.1  # borne souple = 0,9 (milieu 0, demi-plage 1)
+    q[:, 0] = 1.0 + 0.1  # limites ±1 : pénalité au-delà de la vraie butée (facteur 1,0, décision E0)
     t = _terms(ap, aq, bp, bq, lin, ang, ap, aq, bp, bq, lin, ang, joint_pos=q)
     assert torch.allclose(t["joint_limit"], torch.full((N,), 0.1), atol=1e-5)
+    q[:, 0] = 0.95       # dans les butées : suivre une référence collée à la butée ne coûte rien
+    t = _terms(ap, aq, bp, bq, lin, ang, ap, aq, bp, bq, lin, ang, joint_pos=q)
+    assert torch.allclose(t["joint_limit"], torch.zeros(N), atol=1e-6)
+
+
+def test_heading_velocity_ignores_heading_drift_and_vertical_speed():
+    yaw = torch.tensor([0.0, 0.7, -1.2, 3.0])
+    q = quat_from_rotvec(torch.stack([torch.zeros(N), torch.zeros(N), yaw], -1))
+    fwd = quat_apply(q, torch.tensor([4.0, 0.0, 0.3]).expand(N, 3))   # 4 m/s vers l'avant de chaque torse
+    assert torch.allclose(heading_velocity(fwd, q), torch.tensor([4.0, 0.0]).expand(N, 2), atol=1e-5)
+    assert torch.allclose(heading_velocity(torch.zeros(N, 3), q), torch.zeros(N, 2), atol=1e-6)

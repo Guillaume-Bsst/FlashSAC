@@ -2,9 +2,9 @@ from ant_lab.metrics import EvalRow
 
 
 def _run(algo, seed, success_at):
-    rows = [EvalRow(algo, seed, "a", 600.0, 1000, 0.2, 0.5)]
+    rows = [EvalRow(algo, seed, "a", 600.0, 1000, 0.2, 0.5, 3.0)]
     if success_at is not None:
-        rows.append(EvalRow(algo, seed, "b", float(success_at), 5000, 0.95, 0.05))
+        rows.append(EvalRow(algo, seed, "b", float(success_at), 5000, 0.95, 0.05, 0.2))
     return rows
 
 

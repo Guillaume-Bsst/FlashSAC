@@ -36,12 +36,8 @@ def _cone_dirs(mu):
     return dirs
 
 
-def contact_residual(masses, inertias, com_pos, com_quat, com_lin_vel, body_ang_vel, contact_points,
-                     contact_active, fps, mu=FRICTION_MU, g=9.81):
-    """Résidu, frame par frame, du torseur au centre de masse que les contacts ne peuvent pas fournir.
-
-    Retourne ``force_res_N``, ``torque_res_Nm`` et ``force_ratio`` (= force_res / (M·g)), chacun (T,).
-    """
+def required_wrench(masses, inertias, com_pos, com_quat, com_lin_vel, body_ang_vel, fps, g=9.81):
+    """Torseur (T, 6) que les contacts doivent fournir, ``[ṗ + M·g·ẑ ; L̇]`` réduit au CoM, et le CoM (T, 3)."""
     m = np.asarray(masses, dtype=np.float64)
     I = np.asarray(inertias, dtype=np.float64)
     x = np.asarray(com_pos, dtype=np.float64)
@@ -57,7 +53,17 @@ def contact_residual(masses, inertias, com_pos, com_quat, com_lin_vel, body_ang_
     pdot = np.gradient(p, dt, axis=0)
     Ldot = np.gradient(L, dt, axis=0)
     wrench = np.concatenate([pdot + np.array([0.0, 0.0, M * g]), Ldot], axis=-1)  # (T, 6)
+    return wrench, c
 
+
+def contact_residual(masses, inertias, com_pos, com_quat, com_lin_vel, body_ang_vel, contact_points,
+                     contact_active, fps, mu=FRICTION_MU, g=9.81):
+    """Résidu, frame par frame, du torseur au centre de masse que les contacts ne peuvent pas fournir.
+
+    Retourne ``force_res_N``, ``torque_res_Nm`` et ``force_ratio`` (= force_res / (M·g)), chacun (T,).
+    """
+    M = float(np.sum(masses))
+    wrench, c = required_wrench(masses, inertias, com_pos, com_quat, com_lin_vel, body_ang_vel, fps, g)
     dirs = _cone_dirs(mu)
     pts = np.asarray(contact_points, dtype=np.float64)
     act = np.asarray(contact_active, dtype=bool)

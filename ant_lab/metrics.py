@@ -16,10 +16,12 @@ class EvalRow:
     env_steps: int
     frac_complete: float
     mean_joint_err: float
+    mean_torso_vel_err: float
 
 
 def is_success(row: EvalRow) -> bool:
-    return row.frac_complete >= SUCCESS["min_frac_complete"] and row.mean_joint_err < SUCCESS["max_joint_err"]
+    return (row.frac_complete >= SUCCESS["min_frac_complete"] and row.mean_joint_err < SUCCESS["max_joint_err"]
+            and row.mean_torso_vel_err < SUCCESS["max_torso_vel_err"])
 
 
 def _first_success(rows):

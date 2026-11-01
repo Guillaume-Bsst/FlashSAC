@@ -68,6 +68,7 @@ def main():
         obs = reset()
         completed = torch.full((N,), float("nan"), device=u.device)
         joint_err = torch.full((N,), float("nan"), device=u.device)
+        vel_err = torch.full((N,), float("nan"), device=u.device)
         for _ in range(2 * u.ref_T + 10):
             u.last_episode_stats = {}
             obs = step(obs, policy(obs))
@@ -77,10 +78,11 @@ def main():
                 fresh = torch.isnan(completed[ids])  # seul le premier épisode de chaque env compte
                 completed[ids[fresh]] = s["completed"][fresh]
                 joint_err[ids[fresh]] = s["mean_joint_err"][fresh]
+                vel_err[ids[fresh]] = s["mean_torso_vel_err"][fresh]
             if not torch.isnan(completed).any():
                 break
         row = EvalRow(algo, meta["seed"], path.name, mtime - meta["start_time"], env_steps,
-                      float(completed.nanmean()), float(joint_err.nanmean()))
+                      float(completed.nanmean()), float(joint_err.nanmean()), float(vel_err.nanmean()))
         write_rows(csv_path, [row])
         print(f"  {row}", flush=True)
     gym_env.close()

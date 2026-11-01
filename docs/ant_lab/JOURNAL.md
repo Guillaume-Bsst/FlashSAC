@@ -104,10 +104,49 @@ Ce que ça dit :
 5. **La pénalité de limite articulaire est active sur 100 % des frames de la référence** : suivre parfaitement
    coûte ~1,1 point de reward sur 5 à chaque pas (mesuré en mode résiduel). La reward se contredit.
 
+Mesure ajoutée (transport d'efforts de HoloV2, `ant_lab/wrench_viability.py`) : une frame est viable si le
+torseur exigé au CoM est produit, à 10 % du poids près (force et moment), par des forces dans les cônes de
+Coulomb sur les pieds au sol. **σ = 0 : 74 %, σ plancher : 61 %**, σ = 0 rejouée ×1,25 plus vite : 28 %.
+Or σ = 0 sort du simulateur, elle est physique par construction : ses 26 % « non viables » sont l'erreur de la
+mesure (détection de contact à 2 cm, accélérations par différences finies aux impacts ; marge 1 cm → 50 %,
+4 cm → 83 %). Le chiffre se lit donc *relativement* à 74 % : le bruit plancher coûte ~13 points, accélérer le
+mouvement de 25 % en coûte ~46.
+
+Version corrigée (impulsions au lieu d'accélérations : vitesses aux demi-pas, Newton discret sur une fenêtre de
+5 frames, forces permises à chaque frame où le pied est au sol) :
+
+| Référence | Viables (fenêtre 5 frames, tol. 10 %) |
+|---|---|
+| σ = 0 | **98,0 %** |
+| σ plancher | **74,6 %** |
+| σ = 0 ×1,25 / ×1,5 / ×2 | 70,9 / 66,7 / 57,8 % |
+
+La mesure est maintenant juste sur le cas physique (98 %) et le seuil de tolérance ne change presque rien
+(5 % / 20 % : 97 à 100 % sur σ = 0). Le seuil de contact compte encore pour σ plancher (marge 1 / 2 / 3 cm →
+59 / 75 / 92 %) : ses échecs sont des pieds qui portent du poids en flottant à 1–3 cm du sol, exactement l'effet
+du bruit de 2° sur la racine. La marge est donc un choix de modèle (« quelle erreur de pied tolère-t-on ? »),
+pas un détail. Le bruit plancher coûte à peu près autant qu'accélérer le mouvement de 25 %.
+
 Conclusion provisoire : la référence n'est **pas** encore jugeable « presque faisable », parce que les outils de
 mesure (rejeu, terminaisons, critère de succès) ne regardent pas le déplacement. Trois corrections à discuter
 avant E1 : une terminaison sur l'écart horizontal du torse, un critère de succès qui inclut cet écart, et la
 pénalité de limite articulaire (bornes dures au lieu de 90 %, ou retrait).
+
+### Décisions avant E1 (avec l'utilisateur, 2026-11-01)
+
+- **Pas de terminaison sur l'écart horizontal du torse.** BeyondMimic n'en a pas, et c'est voulu : les cibles des
+  corps sont ré-ancrées sur le robot, on lui demande le mouvement, pas l'endroit. Avancer est déjà récompensé par
+  `body_lin_vel` (σ = 1 m/s : rester sur place à côté d'une référence à 4,16 m/s vaut e⁻¹⁷ ≈ 0), et une erreur de
+  vitesse ne s'accumule pas comme une erreur de position. La recette d'entraînement reste intacte, ce qui garde
+  E1 propre : PPO et FlashSAC sur le même problème.
+- **Le critère de succès exige de courir avec la référence** : écart entre la vitesse horizontale moyenne de
+  l'épisode du robot et celle de la référence, chacune dans son repère de cap, < 0,5 m/s. Une première version
+  pas à pas punissait les oscillations de foulée (rejeu exact de σ = 0 : 0,27 m/s ; σ plancher : 0,50 m/s, pile au
+  seuil). Avec les moyennes d'épisode (`checks/check_success_criterion.py`) : politique nulle 4,2 m/s (échec),
+  rejeu exact 0,02 m/s (σ = 0) et 0,19 m/s (σ plancher).
+- **Pénalité articulaire au-delà des vraies butées** (facteur 1,0 au lieu de 0,9).
+- **Référence d'E1 : σ plancher** (75 % de frames viables au sens des impulsions, seuil de contact 2 cm = celui de
+  HoloNew, `contact_threshold`).
 
 ## E1
 

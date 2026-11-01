@@ -28,6 +28,16 @@ def anchor_obs(ref_anchor_pos, ref_anchor_quat, robot_anchor_pos, robot_anchor_q
     return torch.cat([p, m.reshape(m.shape[:-2] + (6,))], dim=-1)
 
 
+def heading_velocity(lin_vel_w, quat):
+    """(N, 2) vitesse horizontale exprimée dans le repère de cap du torse (avant, gauche).
+
+    Moyennée sur un épisode et comparée à celle de la référence, elle dit si le robot court avec la référence, sans
+    punir une dérive de position ou de cap (comme les cibles ré-ancrées de BeyondMimic) ni les oscillations de
+    foulée.
+    """
+    return Q.quat_apply_inverse(Q.yaw_quat(quat), lin_vel_w)[..., :2]
+
+
 def _exp(err_sq, key):
     return torch.exp(-err_sq / REWARD_SIGMA[key] ** 2)
 

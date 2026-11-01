@@ -25,13 +25,15 @@ REWARD_SIGMA = {"anchor_pos": 0.3, "anchor_ori": 0.4, "body_pos": 0.3, "body_ori
                 "body_lin_vel": 1.0, "body_ang_vel": 3.14}
 REWARD_WEIGHT = {"anchor_pos": 0.5, "anchor_ori": 0.5, "body_pos": 1.0, "body_ori": 1.0, "body_lin_vel": 1.0,
                  "body_ang_vel": 1.0, "action_rate": -0.1, "joint_limit": -10.0}
-SOFT_LIMIT_FACTOR = 0.9
+SOFT_LIMIT_FACTOR = 1.0  # E0 : à 0,9 la pénalité était active sur 100 % des frames de la référence
 TERM = {"anchor_z": 0.25, "anchor_grav_z": 0.8, "foot_z": 0.25}
 SAMPLER = {"kernel_size": 1, "lam": 0.8, "uniform_ratio": 0.1, "alpha": 0.001}
 
 # Évaluation et succès.
 EVAL_INIT_NOISE = {"joint": 0.05, "root_xy": 0.02, "yaw": 0.05}
-SUCCESS = {"min_frac_complete": 0.9, "max_joint_err": 0.1}
+# E0 : un robot qui agite les pattes sur place remplissait les deux premières conditions ; la troisième exige de
+# courir avec la référence (écart de vitesse horizontale du torse, en repère de cap, moyenné sur l'épisode).
+SUCCESS = {"min_frac_complete": 0.9, "max_joint_err": 0.1, "max_torso_vel_err": 0.5}
 RUN_CAP_S = 3 * 3600
 
 # Géométrie des pieds (nv_ant.xml) : centre de la sphère du bout de patte, en repère du corps « pied ».

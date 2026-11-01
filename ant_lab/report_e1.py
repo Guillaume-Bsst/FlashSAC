@@ -45,7 +45,8 @@ def write_report(rows_by_run: dict[str, list[EvalRow]], out: Path) -> dict:
     s = summarize(rows_by_run)
     out.mkdir(parents=True, exist_ok=True)
     lines = ["# E1 — PPO contre FlashSAC", "",
-             "Succès : ≥ 90 % des épisodes d'évaluation vont au bout du clip et l'erreur articulaire moyenne < 0,1 rad.",
+             "Succès : ≥ 90 % des épisodes d'évaluation vont au bout du clip, l'erreur articulaire moyenne < 0,1 rad "
+             "et l'écart moyen de vitesse horizontale du torse (repère de cap) < 0,5 m/s.",
              "", "| Run | Algorithme | Graine | Temps jusqu'au succès | Pas d'env jusqu'au succès |",
              "|---|---|---|---|---|"]
     for run, r in s["per_run"].items():
